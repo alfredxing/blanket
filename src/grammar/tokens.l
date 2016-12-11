@@ -152,16 +152,6 @@ int check_type(void) {
     }
 
     SAVE;
-    /*
-    switch (sym_type(yytext)) {
-    case TYPEDEF_NAME:
-        return TYPEDEF_NAME;
-    case ENUMERATION_CONSTANT:
-        return ENUMERATION_CONSTANT;
-    default:
-        return IDENTIFIER;
-    }
-    */
     return res;
 }
 

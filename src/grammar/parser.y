@@ -14,15 +14,6 @@
     int yylex(void);
 
     #define s(s) new string(s)
-
-    string header =
-        "#include <iostream>\n"
-        "#include <string>\n"
-        "#include <vector>\n"
-        "#include <map>\n"
-        "using namespace std;\n"
-        "#define print(a) cout << a << endl;\n\n"
-    ;
 %}
 
 %define parse.lac full
@@ -42,7 +33,7 @@
 %%
 
 program
-    : declarations { cout << header << *$1 << endl; }
+    : declarations { cout << *$1 << endl; }
     ;
 
 statements

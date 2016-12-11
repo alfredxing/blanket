@@ -2,9 +2,11 @@
     #include <string>
     #include <iostream>
     #include <vector>
+    #include <map>
 
     using namespace std;
 
+    map<string, string> types;
     string program;
 
     int yyerror(const char *s);
@@ -12,6 +14,15 @@
     int yylex(void);
 
     #define s(s) new string(s)
+
+    string header =
+        "#include <iostream>\n"
+        "#include <string>\n"
+        "#include <vector>\n"
+        "#include <map>\n"
+        "using namespace std;\n"
+        "#define print(a) cout << a << endl;\n\n"
+    ;
 %}
 
 %define parse.lac full
@@ -23,26 +34,68 @@
 %token AND_OP OR_OP MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN ADD_ASSIGN
 %token SUB_ASSIGN LEFT_ASSIGN RIGHT_ASSIGN AND_ASSIGN
 %token XOR_ASSIGN OR_ASSIGN
-%token TYPEDEF_NAME ENUMERATION_CONSTANT
-%token TYPE
+%token TYPE OTYPE
 %token BOOL CHAR SHORT INT LONG SIGNED UNSIGNED FLOAT DOUBLE VOID
-%token IF ELSE WHILE FOR CONTINUE BREAK RETURN
+%token IF ELSE WHILE DO FOR CONTINUE BREAK RETURN
 
-%start  program
+%start program
 %%
 
 program
-    : statements { cout << *$1 << endl; }
+    : declarations { cout << header << *$1 << endl; }
     ;
 
 statements
     : statement
-    | statements statement { $$ = s(*$1 + *$2); }
+    | statements statement { $$ = s(*$1 + "\n" + *$2); }
     ;
 
 statement
     : declaration
-    | expression { $$ = s(*$1 + ";"); }
+    | block
+    | expression_statement
+    | conditional
+    | iteration
+    | jump
+    ;
+
+expression_statement
+    : expression ';' { $$ = s(*$1 + ";"); }
+    | ';'
+    ;
+
+conditional
+    : IF '(' expression ')' statement ELSE statement { $$ = s("if (" + *$3 + ") " + *$5 + " else " + *$7); }
+    | IF '(' expression ')' statement  { $$ = s("if (" + *$3 + ") " + *$5); }
+    ;
+
+iteration
+    : WHILE '(' expression ')' statement { $$ = s("while (" + *$3 + ") " + *$5); }
+    | DO statement WHILE '(' expression ')' ';' { $$ = s("do " + *$2 + " while (" + *$5 + ");"); }
+    | FOR '(' expression_statement expression_statement ')' statement {
+        $$ = s("for (" + *$3 + " " + *$4 + ") " + *$6);
+    }
+    | FOR '(' expression_statement expression_statement expression ')' statement {
+        $$ = s("for (" + *$3 + " " + *$4 + " " + *$5 + ") " + *$7);
+    }
+    | FOR '(' declaration expression_statement ')' statement {
+        $$ = s("for (" + *$3 + " " + *$4 + ") " + *$6);
+    }
+    | FOR '(' declaration expression_statement expression ')' statement {
+        $$ = s("for (" + *$3 + " " + *$4 + " " + *$5 + ") " + *$7);
+    }
+    ;
+
+jump
+    : CONTINUE ';' { $$ = s(*$1 + ";"); }
+    | BREAK ';' { $$ = s(*$1 + ";"); }
+    | RETURN ';' { $$ = s(*$1 + ";"); }
+    | RETURN expression ';' { $$ = s(*$1 + " " + *$2 + ";"); }
+    ;
+
+declarations
+    : declaration
+    | declarations declaration { $$ = s(*$1 + "\n" + *$2); }
     ;
 
 declaration
@@ -55,16 +108,28 @@ declarator
     ;
 
 var_decl
-    : declarator ';' { $$ = s(*$1 + ";"); }
-    | declarator '=' expression ';' { $$ = s(*$1 + " = " + *$3 + ";"); }
-    | TYPE ident '=' obj_qual ';' {
+    : type ident ';' {
+        $$ = s(*$1 + " " + *$2 + ";");
+        types[*$2] = *$1;
+    }
+    | type ident '=' expression ';' {
+        $$ = s(*$1 + " " + *$2 + " = " + *$4 + ";");
+        types[*$2] = *$1;
+    }
+    | TYPE OTYPE '=' obj_qual ';' {
         $$ = s("typedef struct " + *$2 + " " + *$4 + " " + *$2 + ";");
     }
     ;
 
 func_decl
-    : declarator '(' param_list ')' block { $$ = s(*$1 + "(" + *$3 + ")" + *$5); }
-    | declarator '(' ')' block { $$ = s(*$1 + "()" + *$4); }
+    : type ident '(' param_list ')' block {
+        $$ = s(*$1 + " " + *$2 + "(" + *$4 + ")" + *$6);
+        types[*$2] = "function";
+    }
+    | type ident '(' ')' block {
+        $$ = s(*$1 + " " + *$2 + "()" + *$5);
+        types[*$2] = "function";
+    }
     ;
 
 param_list
@@ -87,7 +152,7 @@ obj_qual_single
 
 type
     : primitive
-    | ident { $$ = s("shared_ptr<" + *$1 + ">"); }
+    | OTYPE { $$ = s("shared_ptr<" + *$1 + ">"); }
     | type '[' ']' { $$ = s("vector<" + *$1 + ">"); }
     ;
 
@@ -133,6 +198,76 @@ assignment_operator
     | OR_ASSIGN
     ;
 
+conditional_expression
+    : logical_or_expression
+    | logical_or_expression '?' expression ':' conditional_expression {
+        $$ = s(*$1 + " ? " + *$3 + " : " + *$5);
+    }
+    ;
+
+logical_or_expression
+    : logical_and_expression
+    | logical_or_expression OR_OP logical_and_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+logical_and_expression
+    : inclusive_or_expression
+    | logical_and_expression AND_OP inclusive_or_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+inclusive_or_expression
+    : exclusive_or_expression
+    | inclusive_or_expression '|' exclusive_or_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+exclusive_or_expression
+    : and_expression
+    | exclusive_or_expression '^' and_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+and_expression
+    : equality_expression
+    | and_expression '&' equality_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+equality_expression
+    : relational_expression
+    | equality_expression EQ_OP relational_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | equality_expression NE_OP relational_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+relational_expression
+    : shift_expression
+    | relational_expression '<' shift_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | relational_expression '>' shift_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | relational_expression LE_OP shift_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | relational_expression GE_OP shift_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+shift_expression
+    : additive_expression
+    | shift_expression LEFT_OP additive_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | shift_expression RIGHT_OP additive_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+additive_expression
+    : multiplicative_expression
+    | additive_expression '+' multiplicative_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | additive_expression '-' multiplicative_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+multiplicative_expression
+    : cast_expression
+    | multiplicative_expression '*' cast_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | multiplicative_expression '/' cast_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    | multiplicative_expression '%' cast_expression { $$ = s(*$1 + " " + *$2 + " " + *$3); }
+    ;
+
+cast_expression
+    : unary_expression
+    | '(' type ')' cast_expression { $$ = s("(" + *$2 + ") " + *$4); }
+    ;
+
 unary_expression
     : postfix_expression
     | INC_OP unary_expression { $$ = s(*$1 + *$2); }
@@ -141,48 +276,68 @@ unary_expression
     ;
 
 unary_operator
-    : '&'
-    | '*'
-    | '+'
+    : '+'
     | '-'
     | '~'
     | '!'
     ;
 
-cast_expression
-    : unary_expression
-    | '(' type ')' cast_expression
-    ;
-
-conditional_expression
-    : logical_or_expression
-    | logical_or_expression '?' expression ':' conditional_expression
-    ;
-
 postfix_expression
     : primary_expression
-    | postfix_expression '[' expression ']'
-    | postfix_expression '(' ')'
-    | postfix_expression '(' argument_expression_list ')'
-    | postfix_expression '.' IDENTIFIER
-    | postfix_expression INC_OP
-    | postfix_expression DEC_OP
-    | '{' initializer_list '}'
-    | '{' initializer_list ',' '}'
+    | postfix_expression '[' expression ']'  { $$ = s(*$1 + "[" + *$3 + "]"); }
+    | postfix_expression '(' ')' { $$ = s(*$1 + "()"); }
+    | postfix_expression '(' argument_expression_list ')'  { $$ = s(*$1 + "(" + *$3 + ")"); }
+    | postfix_expression '.' IDENTIFIER  {
+        if (types.count(*$1) && types[*$1].size() >= 6 && types[*$1].substr(0, 6) == "vector") {
+            $$ = s(*$1 + *$2 + *$3);
+        } else {
+            $$ = s(*$1 + "->" + *$3);
+        }
+    }
+    | postfix_expression INC_OP { $$ = s(*$1 + "++"); }
+    | postfix_expression DEC_OP { $$ = s(*$1 + "--"); }
+    | obj_decl
+    | list_decl
     ;
 
 argument_expression_list
     : expression
-    | argument_expression_list ',' expression
+    | argument_expression_list ',' expression { $$ = s(*$1 + *$2 + " " + *$3); }
+    ;
+
+primary_expression
+    : IDENTIFIER
+    | constant
+    | string
+    | '(' expression ')' { $$ = s("(" + *$2 + ")"); }
+    ;
+
+constant
+    : I_CONSTANT
+    | F_CONSTANT
+    ;
+
+string
+    : STRING_LITERAL
     ;
 
 obj_decl
-    : '{' obj_decl_list '}' { $$ = s("{\n" + *$2 + "\n}"); }
+    : OTYPE '{' obj_decl_list '}' {
+        $$ = s("shared_ptr<" + *$1 + ">(new " + *$1 + "{\n" + *$3 + "\n})");
+    }
+    | OTYPE '{' obj_decl_list ',' '}' {
+        $$ = s("shared_ptr<" + *$1 + ">(new " + *$1 + "{\n" + *$3 + "\n})");
+    }
+    ;
+
+list_decl
+    : '[' obj_decl_list ']' { $$ = s("{" + *$2 + "}"); }
+    | '[' obj_decl_list ',' ']' { $$ = s("{" + *$2 + "}"); }
     ;
 
 obj_decl_list
     : expression
-    | obj_decl_list ',' expression { $$ = s(*$1 + " , " + *$3); }
+    | obj_decl_list ',' expression { $$ = s(*$1 + ", " + *$3); }
     ;
 
 %%

@@ -17,6 +17,8 @@ WSN [ \t\v\f]
 
 %{
     #include <string>
+    #include <iostream>
+    #include <set>
     #include "parser.hh"
 
     using namespace std;
@@ -26,7 +28,9 @@ WSN [ \t\v\f]
     int error(void);
     extern void yyerror(char *s);
 
-    #define SAVE yylval = new std::string(yytext, yyleng)
+    set<string> otypes;
+    string last;
+    #define SAVE { yylval = new string(yytext, yyleng); last = string(yytext, yyleng); }
 %}
 
 %%
@@ -37,6 +41,7 @@ WSN [ \t\v\f]
 "break"                             { SAVE; return(BREAK); }
 "char"                              { SAVE; return(CHAR); }
 "continue"                          { SAVE; return(CONTINUE); }
+"do"                                { SAVE; return(DO); }
 "double"                            { SAVE; return(DOUBLE); }
 "else"                              { SAVE; return(ELSE); }
 "float"                             { SAVE; return(FLOAT); }
@@ -49,7 +54,7 @@ WSN [ \t\v\f]
 "void"                              { SAVE; return(VOID); }
 "while"                             { SAVE; return(WHILE); }
 
-{L}{A}*                             { SAVE; return check_type(); }
+{L}{A}*                             { return check_type(); }
 
 {HP}{H}+{IS}?                       { SAVE; return I_CONSTANT; }
 {NZ}{D}*{IS}?                       { SAVE; return I_CONSTANT; }
@@ -136,6 +141,17 @@ void comment(void) {
 }
 
 int check_type(void) {
+    int res;
+    if (otypes.count(string(yytext))) {
+        res = OTYPE;
+    } else if (last == "type") {
+        res = OTYPE;
+        otypes.insert(string(yytext));
+    } else {
+        res = IDENTIFIER;
+    }
+
+    SAVE;
     /*
     switch (sym_type(yytext)) {
     case TYPEDEF_NAME:
@@ -146,7 +162,7 @@ int check_type(void) {
         return IDENTIFIER;
     }
     */
-    return IDENTIFIER;
+    return res;
 }
 
 int error() {

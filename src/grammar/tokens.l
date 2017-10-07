@@ -49,6 +49,7 @@ WSN [ \t\v\f]
 "if"                                { SAVE; return(IF); }
 "int"                               { SAVE; return(INT); }
 "long"                              { SAVE; return(LONG); }
+"string"                            { SAVE; return(STRING); }
 "return"                            { SAVE; return(RETURN); }
 "type"                              { SAVE; return(TYPE); }
 "void"                              { SAVE; return(VOID); }
